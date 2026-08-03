@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+   <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -72,6 +72,7 @@ button:disabled{opacity:0.6;cursor:not-allowed;}
 .selection-action-btn:hover{transform:scale(1.05);background:white;}
 .selection-action-btn.merge{background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;}
 .download-progress{position:absolute;bottom:0;left:0;width:100%;height:0;background:linear-gradient(135deg,rgba(17,153,142,0.4) 0%,rgba(56,239,125,0.4) 100%);transition:height 0.3s ease;z-index:5;display:none;}
+.download-progress.active{display:block;}
 .download-text{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:white;font-size:12px;font-weight:bold;z-index:6;text-shadow:0 2px 4px rgba(0,0,0,0.5);display:none;}
 .download-text.active{display:block;}
 .download-overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);display:none;z-index:4;}
@@ -164,34 +165,9 @@ button:disabled{opacity:0.6;cursor:not-allowed;}
 .sync-indicator.show{display:flex;}
 .sync-indicator .spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 0.8s linear infinite;}
 @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
-
-/* ── Pantalla de login ── */
-.login-screen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);z-index:5000;display:flex;align-items:center;justify-content:center;}
-.login-screen.hidden{display:none;}
-.login-box{background:white;border-radius:15px;padding:40px 30px;max-width:360px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.4);text-align:center;}
-.login-box h2{color:#333;margin-bottom:10px;font-size:22px;}
-.login-box p{color:#777;font-size:13px;margin-bottom:20px;}
-.login-box input{width:100%;padding:14px;border:2px solid #e0e0e0;border-radius:10px;font-size:15px;margin-bottom:15px;text-align:center;}
-.login-box input:focus{outline:none;border-color:#667eea;}
-.login-error{color:#dc3545;font-size:13px;min-height:18px;margin-bottom:10px;}
-.app-content{display:none;}
-.app-content.ready{display:block;}
 </style>
 </head>
 <body>
-
-<!-- ── Pantalla de login: se muestra primero, antes de cargar nada sensible ── -->
-<div class="login-screen" id="loginScreen">
-<div class="login-box">
-<h2>🔒 Biblioteca de Comics</h2>
-<p>Ingresá la contraseña para continuar</p>
-<input type="password" id="loginPasswordInput" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-<div class="login-error" id="loginError"></div>
-<button onclick="doLogin()" id="loginBtn">Entrar</button>
-</div>
-</div>
-
-<div class="app-content" id="appContent">
 <button class="export-btn-fixed" id="exportSelectedBtn" onclick="exportSelectedComics()">💾 Exportar</button>
 <div class="sync-indicator" id="syncIndicator">
 <div class="spinner"></div>
@@ -371,22 +347,12 @@ button:disabled{opacity:0.6;cursor:not-allowed;}
 </div>
 </div>
 </div>
-</div><!-- /appContent -->
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script>
 let db;
-
-// ── URL de tu Worker VORTEX (mismo proxy IAsofi, ahora protegido) ──
-// IMPORTANTE: cambiá esto si tu Worker desplegado tiene otra URL.
-const WORKER_BASE='https://ia-sofia.armijosfeo5.workers.dev/';
-
-// ── Estos dos ya NO se hardcodean. Se piden al Worker recién después
-//    de loguearse con la contraseña. Viven solo en memoria de esta pestaña. ──
-let PROXY_AUTH_KEY=null;
-let GITHUB_SYNC_KEY=null;
-
+const PROXY_URL='https://ia-sofia.armijosfeo5.workers.dev/?url=';
+const ALMACEN_KEY='__ALMACEN_KEY__'; // Será reemplazado por GitHub Actions
 const GITHUB_REPO='Pvtin01/Almac-n';
 const GITHUB_FILE_PATH='Comic.txt';
 const RAW_GITHUB_URL='https://raw.githubusercontent.com/Pvtin01/Almac-n/refs/heads/main/Comic.txt';
@@ -406,47 +372,6 @@ let loadedImageContainers=[];
 let currentLoadingComicId=null;
 let imageCache=new Map();
 let isLoadingRio=false;
-
-// ── LOGIN ──────────────────────────────────────────────────────
-async function doLogin(){
-const input=document.getElementById('loginPasswordInput');
-const errorEl=document.getElementById('loginError');
-const btn=document.getElementById('loginBtn');
-const password=input.value;
-if(!password){
-errorEl.textContent='Ingresá una contraseña';
-return;
-}
-btn.disabled=true;
-btn.textContent='Verificando...';
-errorEl.textContent='';
-try{
-const response=await fetch(WORKER_BASE+'?action=auth',{
-method:'POST',
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({password})
-});
-if(!response.ok){
-errorEl.textContent='❌ Contraseña incorrecta';
-btn.disabled=false;
-btn.textContent='Entrar';
-input.value='';
-input.focus();
-return;
-}
-const data=await response.json();
-PROXY_AUTH_KEY=data.proxyKey;
-GITHUB_SYNC_KEY=data.syncKey;
-document.getElementById('loginScreen').classList.add('hidden');
-document.getElementById('appContent').classList.add('ready');
-initDB();
-}catch(err){
-console.error('Error de login:',err);
-errorEl.textContent='⚠️ No se pudo conectar con el servidor';
-btn.disabled=false;
-btn.textContent='Entrar';
-}
-}
 
 function initDB(){
 loadFromGitHub();
@@ -941,9 +866,9 @@ updateErrorButton();
 return;
 }
 const proxyEnabled=document.getElementById('proxyToggle').checked;
-if(proxyEnabled&&!this.src.includes(WORKER_BASE)){
+if(proxyEnabled&&!this.src.includes(PROXY_URL)){
 this.dataset.retried='true';
-this.src=getProxyUrl(this.dataset.originalUrl);
+this.src=PROXY_URL+encodeURIComponent(this.dataset.originalUrl);
 }else{
 this.classList.add('error');
 this.parentElement.classList.add('loaded');
@@ -1238,11 +1163,10 @@ closeUrlEdit();
 }
 }
 
-// ── Ahora manda el X-Auth-Key con PROXY_AUTH_KEY (ya no ?url= a secas) ──
 function getProxyUrl(url){
 const useProxy=document.getElementById('proxyToggle').checked;
 if(!useProxy)return url;
-return WORKER_BASE+'?url='+encodeURIComponent(btoa(url))+'&k='+encodeURIComponent(PROXY_AUTH_KEY);
+return PROXY_URL+encodeURIComponent(url);
 }
 
 function loadFromFile(){
@@ -1508,8 +1432,8 @@ library.appendChild(card);
 const coverImg=card.querySelector('.comic-cover-img');
 coverImg.onerror=function(){
 const proxyEnabled=document.getElementById('proxyToggle').checked;
-if(proxyEnabled&&!this.src.includes(WORKER_BASE)){
-this.src=getProxyUrl(this.dataset.originalUrl);
+if(proxyEnabled&&!this.src.includes(PROXY_URL)){
+this.src=PROXY_URL+encodeURIComponent(this.dataset.originalUrl);
 }
 };
 });
@@ -1669,7 +1593,7 @@ loadLibrary();
 
 function deleteSelectedComics(){
 if(selectedComics.length===0){
-alert('⚠️ No hay comics seleccionados');g
+alert('⚠️ No hay comics seleccionados');
 return;
 }
 if(!confirm(`¿Eliminar ${selectedComics.length} comics seleccionados?`))return;
@@ -1863,8 +1787,6 @@ touchEndY=e.changedTouches[0].screenY;
 handleSwipeGesture();
 },{passive:true});
 
-// ── Ahora manda el JSON al Worker (?action=sync) en vez de pegarle
-//    directo a la API de GitHub con un token en el cliente. ──
 async function syncToGitHub(){
 const indicator=document.getElementById('syncIndicator');
 if(indicator){
@@ -1876,19 +1798,37 @@ version:'1.0',
 exportDate:new Date().toISOString(),
 comics:allComics
 };
-const response=await fetch(WORKER_BASE+'?action=sync',{
-method:'POST',
+const content=JSON.stringify(exportData,null,2);
+const encoded=btoa(unescape(encodeURIComponent(content)));
+const getResponse=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`,{
 headers:{
-'Content-Type':'application/json',
-'X-Auth-Key':GITHUB_SYNC_KEY
+'Authorization':`token ${ALMACEN_KEY}`,
+'Accept':'application/vnd.github.v3+json'
+}
+});
+let sha=null;
+if(getResponse.ok){
+const fileData=await getResponse.json();
+sha=fileData.sha;
+}
+const updateResponse=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`,{
+method:'PUT',
+headers:{
+'Authorization':`token ${ALMACEN_KEY}`,
+'Accept':'application/vnd.github.v3+json',
+'Content-Type':'application/json'
 },
-body:JSON.stringify(exportData)
+body:JSON.stringify({
+message:`Actualización - ${new Date().toISOString()}`,
+content:encoded,
+sha:sha
+})
 });
 if(indicator){
 indicator.classList.remove('show');
 }
-if(response.ok){
-console.log('✅ Sincronizado con GitHub (vía Worker)');
+if(updateResponse.ok){
+console.log('✅ Sincronizado con GitHub');
 return true;
 }else{
 console.error('❌ Error al sincronizar con GitHub');
@@ -1903,7 +1843,7 @@ return false;
 }
 }
 
-// initDB() ya NO se llama acá directo — se llama recién después del login exitoso (doLogin()).
+initDB();
 </script>
 </body>
 </html>
