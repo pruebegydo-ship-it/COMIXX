@@ -120,6 +120,22 @@ button:disabled{opacity:0.6;cursor:not-allowed;}
 .merge-info{background:#e3f2fd;padding:15px;border-radius:10px;margin-bottom:20px;color:#1976d2;font-size:14px;}
 .merge-buttons{display:flex;gap:10px;}
 .merge-buttons button{padding:14px 28px;border:none;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;flex:1;width:auto;}
+.json-error-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);z-index:2500;overflow-y:auto;padding:20px;}
+.json-error-modal.active{display:block;}
+.json-error-box{background:white;border-radius:15px;padding:30px;max-width:900px;margin:0 auto;box-shadow:0 10px 40px rgba(0,0,0,0.5);}
+.json-error-box h3{color:#dc3545;margin-bottom:10px;font-size:22px;text-align:center;}
+.json-error-desc{color:#666;font-size:13px;margin-bottom:15px;text-align:center;line-height:1.5;}
+.json-error-msg{background:#f8d7da;border:2px solid #dc3545;border-radius:10px;padding:15px;color:#721c24;font-size:13px;margin-bottom:15px;white-space:pre-wrap;word-break:break-word;font-family:monospace;}
+.json-error-snippet{background:#282c34;color:#abb2bf;border-radius:10px;padding:15px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-word;margin-bottom:15px;max-height:220px;overflow-y:auto;line-height:1.6;}
+.json-error-snippet .marker{color:#ff5555;font-weight:bold;background:rgba(255,85,85,0.25);padding:2px 4px;border-radius:3px;}
+.json-error-actions{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;}
+.json-error-actions button{flex:1;min-width:150px;width:auto;padding:12px 16px;border:none;border-radius:10px;font-size:13px;font-weight:bold;cursor:pointer;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;}
+.json-raw-textarea{width:100%;min-height:280px;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:12px;font-family:monospace;resize:vertical;display:none;margin-bottom:12px;}
+.json-raw-textarea.show{display:block;}
+.json-parse-status{margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;font-weight:600;display:none;}
+.json-parse-status.show{display:block;}
+.json-parse-status.ok{background:#d4edda;color:#155724;border:2px solid #28a745;}
+.json-parse-status.fail{background:#f8d7da;color:#721c24;border:2px solid #dc3545;}
 .merge-confirm-btn{background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;}
 .merge-cancel-btn{background:#6c757d;color:white;}
 .select-all-container{display:none;background:rgba(255,255,255,0.95);padding:15px 20px;border-radius:12px;margin-bottom:20px;box-shadow:0 4px 15px rgba(0,0,0,0.2);align-items:center;justify-content:center;gap:12px;}
@@ -347,11 +363,30 @@ button:disabled{opacity:0.6;cursor:not-allowed;}
 </div>
 </div>
 </div>
+<div class="json-error-modal" id="jsonErrorModal">
+<div class="json-error-box">
+<h3>⚠️ Comic.txt no es JSON válido</h3>
+<p class="json-error-desc">El archivo se descargó de GitHub pero no se pudo interpretar. Abajo está el error exacto, el punto donde falla, y una forma de editarlo y corregirlo sin perder los comics existentes.</p>
+<div class="json-error-msg" id="jsonErrorMsg"></div>
+<div class="json-error-snippet" id="jsonErrorSnippet"></div>
+<div class="json-error-actions">
+<button onclick="toggleJsonRawEdit()">✏️ Ver / Editar JSON completo</button>
+<button onclick="retryLoadFromGitHub()">🔄 Reintentar lectura</button>
+<button style="background:#6c757d;" onclick="closeJsonErrorModal()">❌ Cerrar</button>
+</div>
+<textarea class="json-raw-textarea" id="jsonRawTextarea" spellcheck="false"></textarea>
+<div class="json-parse-status" id="jsonParseStatus"></div>
+<div class="json-error-actions" id="jsonSaveActions" style="display:none;">
+<button onclick="validateJsonEdit()">✅ Validar JSON</button>
+<button style="background:linear-gradient(135deg,#11998e 0%,#38ef7d 100%);" onclick="saveJsonCorrection()">💾 Guardar corrección en GitHub</button>
+</div>
+</div>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script>
 let db;
-const PROXY_URL='https://ia-sofia.armijosfeo5.workers.dev/?url=';
+const PROXY_URL='https://bliblotecacomic.armijosfeo.workers.dev/';
 const ALMACEN_KEY='__ALMACEN_KEY__'; // Será reemplazado por GitHub Actions
 const GITHUB_REPO='Pvtin01/Almac-n';
 const GITHUB_FILE_PATH='Comic.txt';
@@ -419,7 +454,17 @@ headers:{
 }
 });
 if(response.ok){
-const data=await response.json();
+const rawText=await response.text();
+let data;
+try{
+data=JSON.parse(rawText);
+}catch(parseError){
+console.error('❌ Comic.txt no es JSON válido:',parseError);
+showJsonErrorModal(rawText,parseError);
+allComics=[];
+loadLibrary();
+return;
+}
 allComics=data.comics||[];
 if(allComics.length>0){
 const maxId=Math.max(...allComics.map(c=>c.id||0));
@@ -1841,6 +1886,135 @@ indicator.classList.remove('show');
 console.error('Error en sync GitHub:',error);
 return false;
 }
+}
+
+function escapeHtml(str){
+return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function getJsonErrorPosition(error){
+const msg=error.message||'';
+let match=msg.match(/position\s+(\d+)/i);
+if(match)return parseInt(match[1],10);
+match=msg.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+if(match)return{line:parseInt(match[1],10),column:parseInt(match[2],10)};
+return null;
+}
+
+function lineColumnToIndex(text,line,column){
+const lines=text.split('\n');
+let index=0;
+for(let i=0;i<line-1&&i<lines.length;i++){
+index+=lines[i].length+1;
+}
+return index+column-1;
+}
+
+function showJsonErrorModal(rawText,error){
+const posInfo=getJsonErrorPosition(error);
+let index=rawText.length;
+if(typeof posInfo==='number'){
+index=posInfo;
+}else if(posInfo&&typeof posInfo==='object'){
+index=lineColumnToIndex(rawText,posInfo.line,posInfo.column);
+}
+document.getElementById('jsonErrorMsg').textContent=`${error.message}\n\nTamaño del archivo descargado: ${rawText.length} caracteres.`;
+const start=Math.max(0,index-100);
+const end=Math.min(rawText.length,index+100);
+const before=escapeHtml(rawText.substring(start,index));
+const at=index<rawText.length?escapeHtml(rawText.charAt(index)):'∎ (fin del archivo)';
+const after=escapeHtml(rawText.substring(index+1,end));
+document.getElementById('jsonErrorSnippet').innerHTML=
+(start>0?'…':'')+before+
+`<span class="marker">⚠️AQUÍ⚠️→${at}←</span>`+
+after+(end<rawText.length?'…':'');
+const textarea=document.getElementById('jsonRawTextarea');
+textarea.value=rawText;
+textarea.classList.remove('show');
+document.getElementById('jsonSaveActions').style.display='none';
+document.getElementById('jsonParseStatus').className='json-parse-status';
+document.getElementById('jsonErrorModal').classList.add('active');
+}
+
+function closeJsonErrorModal(){
+document.getElementById('jsonErrorModal').classList.remove('active');
+}
+
+function toggleJsonRawEdit(){
+const ta=document.getElementById('jsonRawTextarea');
+const saveActions=document.getElementById('jsonSaveActions');
+ta.classList.toggle('show');
+saveActions.style.display=ta.classList.contains('show')?'flex':'none';
+}
+
+function validateJsonEdit(){
+const statusEl=document.getElementById('jsonParseStatus');
+const text=document.getElementById('jsonRawTextarea').value;
+try{
+JSON.parse(text);
+statusEl.textContent='✅ JSON válido. Ya puedes guardar la corrección en GitHub.';
+statusEl.className='json-parse-status show ok';
+return true;
+}catch(e){
+statusEl.textContent=`❌ Todavía hay un error: ${e.message}`;
+statusEl.className='json-parse-status show fail';
+return false;
+}
+}
+
+async function saveJsonCorrection(){
+if(!validateJsonEdit())return;
+const text=document.getElementById('jsonRawTextarea').value;
+let parsed;
+try{
+parsed=JSON.parse(text);
+}catch(e){
+return;
+}
+if(!confirm('¿Guardar esta corrección directamente en GitHub, reemplazando Comic.txt?'))return;
+try{
+const content=JSON.stringify(parsed,null,2);
+const encoded=btoa(unescape(encodeURIComponent(content)));
+const getResponse=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`,{
+headers:{
+'Authorization':`token ${ALMACEN_KEY}`,
+'Accept':'application/vnd.github.v3+json'
+}
+});
+let sha=null;
+if(getResponse.ok){
+const fileData=await getResponse.json();
+sha=fileData.sha;
+}
+const putResponse=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`,{
+method:'PUT',
+headers:{
+'Authorization':`token ${ALMACEN_KEY}`,
+'Accept':'application/vnd.github.v3+json',
+'Content-Type':'application/json'
+},
+body:JSON.stringify({
+message:`Corrección manual de JSON - ${new Date().toISOString()}`,
+content:encoded,
+sha:sha
+})
+});
+if(putResponse.ok){
+alert('✅ Corrección guardada en GitHub. Recargando biblioteca...');
+closeJsonErrorModal();
+loadFromGitHub();
+}else{
+const errBody=await putResponse.text();
+alert(`❌ No se pudo guardar (status ${putResponse.status}):\n${errBody}`);
+}
+}catch(err){
+alert(`❌ Error de red al guardar: ${err.message}`);
+}
+}
+
+function retryLoadFromGitHub(){
+closeJsonErrorModal();
+loadFromGitHub();
 }
 
 initDB();
