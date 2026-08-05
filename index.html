@@ -177,17 +177,50 @@ button:disabled{opacity:0.6;cursor:not-allowed;}
 .image-number{font-size:20px;}
 .export-btn-fixed{top:10px;right:10px;padding:6px 10px;font-size:11px;}
 }
-.sync-indicator{position:fixed;bottom:15px;left:15px;background:rgba(17,153,142,0.9);color:white;padding:8px 15px;border-radius:20px;font-size:12px;font-weight:600;display:none;align-items:center;gap:8px;z-index:1000;box-shadow:0 4px 15px rgba(0,0,0,0.3);backdrop-filter:blur(10px);}
+.sync-indicator{position:fixed;bottom:15px;left:15px;background:rgba(17,153,142,0.92);color:white;padding:9px 16px;border-radius:20px;font-size:12px;font-weight:600;display:none;align-items:center;gap:8px;z-index:1000;box-shadow:0 4px 15px rgba(0,0,0,0.3);backdrop-filter:blur(10px);transition:background 0.3s,transform 0.2s;cursor:pointer;}
 .sync-indicator.show{display:flex;}
-.sync-indicator .spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 0.8s linear infinite;}
+.sync-indicator.state-uploading{background:rgba(102,126,234,0.92);}
+.sync-indicator.state-ok{background:rgba(17,153,142,0.95);}
+.sync-indicator.state-error{background:rgba(220,53,69,0.95);}
+.sync-indicator.state-pending{background:rgba(255,152,0,0.95);}
+.sync-indicator:active{transform:scale(0.97);}
+.sync-indicator .spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;}
+.sync-indicator .sync-icon{font-size:14px;flex-shrink:0;}
+.sync-indicator .sync-badge{background:rgba(255,255,255,0.25);border-radius:10px;padding:1px 7px;font-size:10px;margin-left:2px;}
 @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+.history-panel{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);z-index:2600;overflow-y:auto;padding:20px;}
+.history-panel.active{display:block;}
+.history-box{background:white;border-radius:15px;padding:25px;max-width:700px;margin:0 auto;box-shadow:0 10px 40px rgba(0,0,0,0.5);}
+.history-box h3{color:#333;margin-bottom:5px;font-size:20px;text-align:center;}
+.history-summary{text-align:center;color:#666;font-size:13px;margin-bottom:18px;}
+.history-list{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;margin-bottom:15px;}
+.history-empty{text-align:center;color:#999;padding:30px 10px;font-size:14px;}
+.history-item{display:flex;align-items:center;gap:12px;background:#f8f9fa;border-radius:10px;padding:10px 14px;border-left:4px solid #ccc;}
+.history-item.status-ok{border-left-color:#11998e;}
+.history-item.status-error{border-left-color:#dc3545;}
+.history-item.status-pending{border-left-color:#ff9800;}
+.history-item.status-uploading{border-left-color:#667eea;}
+.history-item-icon{font-size:18px;flex-shrink:0;width:24px;text-align:center;}
+.history-item-body{flex:1;min-width:0;}
+.history-item-title{font-size:13px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.history-item-meta{font-size:11px;color:#888;margin-top:2px;}
+.history-item-retry{background:#dc3545;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;width:auto;flex-shrink:0;}
+.history-item-retry:hover{background:#c82333;}
+.history-actions{display:flex;gap:10px;}
+.history-actions button{padding:12px 20px;border:none;border-radius:10px;font-size:14px;font-weight:bold;cursor:pointer;flex:1;width:auto;}
+.history-close-btn{background:#6c757d;color:white;}
+.history-close-btn:hover{background:#5a6268;}
+.history-clear-btn{background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;}
+.history-retry-all-btn{background:linear-gradient(135deg,#11998e 0%,#38ef7d 100%);color:white;}
 </style>
 </head>
 <body>
 <button class="export-btn-fixed" id="exportSelectedBtn" onclick="exportSelectedComics()">💾 Exportar</button>
-<div class="sync-indicator" id="syncIndicator">
-<div class="spinner"></div>
-<span>Sincronizando con GitHub...</span>
+<div class="sync-indicator" id="syncIndicator" onclick="openHistoryPanel()">
+<div class="spinner" id="syncSpinner"></div>
+<span class="sync-icon" id="syncIcon" style="display:none;"></span>
+<span id="syncText">Sincronizando con GitHub...</span>
+<span class="sync-badge" id="syncPendingBadge" style="display:none;"></span>
 </div>
 <div class="container">
 <div class="header">
@@ -243,6 +276,15 @@ button:disabled{opacity:0.6;cursor:not-allowed;}
 <span>🎯 Selección</span>
 <label class="switch">
 <input type="checkbox" id="selectToggle" onchange="toggleSelectMode()">
+<span class="slider"></span>
+</label>
+</label>
+</div>
+<div class="setting-item">
+<label class="setting-label">
+<span>📜 Historial</span>
+<label class="switch">
+<input type="checkbox" id="historyToggle" onchange="onHistoryToggleChange()">
 <span class="slider"></span>
 </label>
 </label>
@@ -379,6 +421,18 @@ button:disabled{opacity:0.6;cursor:not-allowed;}
 <div class="json-error-actions" id="jsonSaveActions" style="display:none;">
 <button onclick="validateJsonEdit()">✅ Validar JSON</button>
 <button style="background:linear-gradient(135deg,#11998e 0%,#38ef7d 100%);" onclick="saveJsonCorrection()">💾 Guardar corrección en GitHub</button>
+</div>
+</div>
+</div>
+<div class="history-panel" id="historyPanel">
+<div class="history-box">
+<h3>📜 Historial de Subidas</h3>
+<p class="history-summary" id="historySummary">Cargando...</p>
+<div class="history-list" id="historyList"></div>
+<div class="history-actions">
+<button class="history-retry-all-btn" id="historyRetryAllBtn" onclick="retryAllPendingSync()" style="display:none;">🔄 Reintentar pendientes</button>
+<button class="history-clear-btn" onclick="clearSyncHistory()">🗑️ Limpiar historial</button>
+<button class="history-close-btn" onclick="closeHistoryPanel()">❌ Cerrar</button>
 </div>
 </div>
 </div>
@@ -785,10 +839,10 @@ selectedComics=[];
 updateSelectedButton();
 updateExportButton();
 updateSelectionActions();
-syncToGitHub();
 closeMergeModal();
 loadLibrary();
-alert(`✅ Comic fusionado con ${mergedPages.length} páginas`);
+alert(`✅ Comic fusionado con ${mergedPages.length} páginas. Subiendo a GitHub en segundo plano...`);
+syncToGitHub();
 }
 
 function openEditSelectedComic(){
@@ -1196,11 +1250,11 @@ updated=true;
 });
 }
 if(updated){
-syncToGitHub();
 closeUrlEdit();
 closeModal();
 loadLibrary();
-alert('✅ Comic actualizado correctamente');
+alert('✅ Comic actualizado localmente. Subiendo a GitHub en segundo plano...');
+syncToGitHub();
 }else{
 alert('ℹ️ No se realizaron cambios');
 closeUrlEdit();
@@ -1321,14 +1375,19 @@ cover:validUrls[0],
 date:new Date().toISOString()
 };
 allComics.push(comic);
-status.textContent=`✅ Comic guardado (${validUrls.length} páginas)`;
 document.getElementById('comicTitle').value='';
 document.getElementById('urlInput').value='';
-await syncToGitHub();
+status.innerHTML='<span class="loading">Guardado local, subiendo a GitHub</span>';
+const synced=await syncToGitHub();
+if(synced){
+status.textContent=`✅ Comic guardado y subido correctamente (${validUrls.length} páginas)`;
+}else{
+status.textContent=`⚠️ Comic guardado localmente (${validUrls.length} páginas). No se pudo subir a GitHub, se reintentará solo`;
+}
 loadLibrary();
 setTimeout(()=>{
 switchTab('library');
-},1500);
+},synced?1500:2500);
 }
 
 async function checkImageExists(url){
@@ -1648,9 +1707,9 @@ selectedComics=[];
 updateSelectedButton();
 updateExportButton();
 updateSelectionActions();
-syncToGitHub();
 loadLibrary();
-alert(`✅ ${count} comics eliminados`);
+alert(`✅ ${count} comics eliminados. Subiendo cambio a GitHub en segundo plano...`);
+syncToGitHub();
 }
 
 async function downloadSelectedComics(){
@@ -1832,16 +1891,196 @@ touchEndY=e.changedTouches[0].screenY;
 handleSwipeGesture();
 },{passive:true});
 
-async function syncToGitHub(){
-const indicator=document.getElementById('syncIndicator');
-if(indicator){
-indicator.classList.add('show');
+/* ============================================================
+   SISTEMA DE SINCRONIZACIÓN CON HISTORIAL Y COLA PERSISTENTE
+   ============================================================
+   Antes: syncToGitHub() subía y, si no había red o GitHub fallaba,
+   el error solo quedaba en la consola. La app ya había mostrado
+   "✅ guardado" y el cambio se perdía al cerrar la pestaña.
+   Ahora: cada intento de sync se guarda primero en IndexedDB
+   (localSyncDB). Si GitHub confirma, se marca "ok". Si falla,
+   queda "pending" y un reintento automático en segundo plano
+   (cada 20s + al recuperar conexión + al abrir la pestaña) lo
+   vuelve a intentar hasta que se suba, sin perder el cambio.
+   ============================================================ */
+let syncHistoryDB=null;
+let syncRetryTimer=null;
+let syncInFlight=false;
+let syncQueuedWhileBusy=false;
+const SYNC_RETRY_INTERVAL_MS=20000;
+const SYNC_HISTORY_LIMIT=60;
+
+function openSyncHistoryDB(){
+return new Promise((resolve,reject)=>{
+if(syncHistoryDB){resolve(syncHistoryDB);return;}
+const req=indexedDB.open('ComicSyncHistoryDB',1);
+req.onupgradeneeded=(e)=>{
+const dbase=e.target.result;
+if(!dbase.objectStoreNames.contains('syncEntries')){
+const store=dbase.createObjectStore('syncEntries',{keyPath:'localId',autoIncrement:true});
+store.createIndex('status','status',{unique:false});
 }
+};
+req.onsuccess=(e)=>{syncHistoryDB=e.target.result;resolve(syncHistoryDB);};
+req.onerror=(e)=>reject(e.target.error);
+});
+}
+
+async function addSyncEntry(entry){
+const dbase=await openSyncHistoryDB();
+return new Promise((resolve,reject)=>{
+const tx=dbase.transaction('syncEntries','readwrite');
+const store=tx.objectStore('syncEntries');
+const req=store.add(entry);
+req.onsuccess=()=>resolve(req.result);
+req.onerror=(e)=>reject(e.target.error);
+});
+}
+
+async function updateSyncEntry(localId,updates){
+const dbase=await openSyncHistoryDB();
+return new Promise((resolve,reject)=>{
+const tx=dbase.transaction('syncEntries','readwrite');
+const store=tx.objectStore('syncEntries');
+const getReq=store.get(localId);
+getReq.onsuccess=()=>{
+const existing=getReq.result;
+if(!existing){resolve(false);return;}
+Object.assign(existing,updates);
+const putReq=store.put(existing);
+putReq.onsuccess=()=>resolve(true);
+putReq.onerror=(e)=>reject(e.target.error);
+};
+getReq.onerror=(e)=>reject(e.target.error);
+});
+}
+
+async function getAllSyncEntries(){
+const dbase=await openSyncHistoryDB();
+return new Promise((resolve,reject)=>{
+const tx=dbase.transaction('syncEntries','readonly');
+const store=tx.objectStore('syncEntries');
+const req=store.getAll();
+req.onsuccess=()=>resolve(req.result.sort((a,b)=>b.localId-a.localId));
+req.onerror=(e)=>reject(e.target.error);
+});
+}
+
+async function deleteSyncEntry(localId){
+const dbase=await openSyncHistoryDB();
+return new Promise((resolve,reject)=>{
+const tx=dbase.transaction('syncEntries','readwrite');
+const store=tx.objectStore('syncEntries');
+const req=store.delete(localId);
+req.onsuccess=()=>resolve(true);
+req.onerror=(e)=>reject(e.target.error);
+});
+}
+
+async function trimSyncHistory(){
+try{
+const entries=await getAllSyncEntries();
+const excess=entries.filter(e=>e.status==='ok').slice(SYNC_HISTORY_LIMIT);
+for(const e of excess){
+await deleteSyncEntry(e.localId);
+}
+}catch(err){
+console.error('No se pudo recortar el historial de sync:',err);
+}
+}
+
+function setSyncIndicator(state,text,pendingCount){
+const indicator=document.getElementById('syncIndicator');
+const spinner=document.getElementById('syncSpinner');
+const icon=document.getElementById('syncIcon');
+const textEl=document.getElementById('syncText');
+const badge=document.getElementById('syncPendingBadge');
+if(!indicator)return;
+indicator.classList.remove('state-uploading','state-ok','state-error','state-pending');
+indicator.classList.add('show');
+if(state==='uploading'){
+indicator.classList.add('state-uploading');
+spinner.style.display='block';
+icon.style.display='none';
+textEl.textContent=text||'Subiendo a GitHub...';
+}else{
+spinner.style.display='none';
+icon.style.display='inline';
+if(state==='ok'){
+indicator.classList.add('state-ok');
+icon.textContent='✅';
+textEl.textContent=text||'Correcto, se subió bien';
+}else if(state==='error'){
+indicator.classList.add('state-error');
+icon.textContent='⚠️';
+textEl.textContent=text||'No se pudo subir, guardado local';
+}else if(state==='pending'){
+indicator.classList.add('state-pending');
+icon.textContent='⏳';
+textEl.textContent=text||'Pendiente por subir';
+}
+}
+if(pendingCount&&pendingCount>0){
+badge.style.display='inline';
+badge.textContent=pendingCount>1?`+${pendingCount} pend.`:'1 pend.';
+}else{
+badge.style.display='none';
+}
+}
+
+function hideSyncIndicatorSoon(delay){
+clearTimeout(window._syncIndicatorHideTimer);
+window._syncIndicatorHideTimer=setTimeout(()=>{
+const indicator=document.getElementById('syncIndicator');
+if(indicator)indicator.classList.remove('show');
+},delay||2500);
+}
+
+async function countPendingSyncEntries(){
+try{
+const entries=await getAllSyncEntries();
+return entries.filter(e=>e.status==='pending'||e.status==='error').length;
+}catch(err){
+return 0;
+}
+}
+
+/* syncToGitHub(): mismo nombre y misma forma de llamarla que antes,
+   así los ~12 sitios del código que ya la invocan (con o sin await)
+   siguen funcionando igual. La diferencia es todo lo que pasa
+   por dentro ahora: guarda local primero, sube, marca estado real
+   y deja el reintento automático activado. */
+async function syncToGitHub(){
+if(syncInFlight){
+syncQueuedWhileBusy=true;
+return true;
+}
+syncInFlight=true;
+const snapshot=JSON.parse(JSON.stringify(allComics));
+const localId=await addSyncEntry({
+status:'pending',
+comicsCount:snapshot.length,
+createdAt:new Date().toISOString(),
+attempts:0,
+lastError:null,
+comicsSnapshot:snapshot
+});
+const result=await attemptGithubSync(localId,snapshot);
+syncInFlight=false;
+if(syncQueuedWhileBusy){
+syncQueuedWhileBusy=false;
+setTimeout(()=>syncToGitHub(),300);
+}
+return result;
+}
+
+async function attemptGithubSync(localId,snapshot){
+setSyncIndicator('uploading','Subiendo a GitHub...');
 try{
 const exportData={
 version:'1.0',
 exportDate:new Date().toISOString(),
-comics:allComics
+comics:snapshot
 };
 const content=JSON.stringify(exportData,null,2);
 const encoded=btoa(unescape(encodeURIComponent(content)));
@@ -1869,24 +2108,227 @@ content:encoded,
 sha:sha
 })
 });
-if(indicator){
-indicator.classList.remove('show');
-}
 if(updateResponse.ok){
+await updateSyncEntry(localId,{
+status:'ok',
+attempts:(await getSyncEntryAttempts(localId))+1,
+syncedAt:new Date().toISOString(),
+comicsSnapshot:null
+});
 console.log('✅ Sincronizado con GitHub');
+setSyncIndicator('ok','✅ Correcto, se subió bien');
+hideSyncIndicatorSoon(2500);
+refreshHistoryPanelIfOpen();
+trimSyncHistory();
 return true;
 }else{
-console.error('❌ Error al sincronizar con GitHub');
-return false;
+const errBody=await updateResponse.text().catch(()=>'');
+throw new Error(`GitHub respondió ${updateResponse.status}: ${errBody.slice(0,150)}`);
 }
 }catch(error){
-if(indicator){
-indicator.classList.remove('show');
-}
 console.error('Error en sync GitHub:',error);
+await updateSyncEntry(localId,{
+status:'error',
+attempts:(await getSyncEntryAttempts(localId))+1,
+lastError:error.message||String(error),
+lastAttemptAt:new Date().toISOString()
+});
+const pending=await countPendingSyncEntries();
+setSyncIndicator('error','⚠️ No se subió, guardado local',pending);
+scheduleSyncRetry();
+refreshHistoryPanelIfOpen();
 return false;
 }
 }
+
+async function getSyncEntryAttempts(localId){
+try{
+const entries=await getAllSyncEntries();
+const found=entries.find(e=>e.localId===localId);
+return found?(found.attempts||0):0;
+}catch(err){
+return 0;
+}
+}
+
+function scheduleSyncRetry(){
+if(syncRetryTimer)return;
+syncRetryTimer=setTimeout(async()=>{
+syncRetryTimer=null;
+await retryAllPendingSync(true);
+},SYNC_RETRY_INTERVAL_MS);
+}
+
+async function retryAllPendingSync(silent){
+try{
+const entries=await getAllSyncEntries();
+const pending=entries.filter(e=>e.status==='pending'||e.status==='error');
+if(pending.length===0){
+if(!silent){
+setSyncIndicator('ok','✅ No hay nada pendiente');
+hideSyncIndicatorSoon(1800);
+}
+return;
+}
+pending.sort((a,b)=>a.localId-b.localId);
+for(const entry of pending){
+if(!entry.comicsSnapshot){
+await updateSyncEntry(entry.localId,{status:'error',lastError:'Sin datos locales para reintentar (se perdió el respaldo).'});
+continue;
+}
+await attemptGithubSync(entry.localId,entry.comicsSnapshot);
+}
+}catch(err){
+console.error('Error al reintentar pendientes:',err);
+}
+}
+
+window.addEventListener('online',()=>{
+console.log('🌐 Conexión recuperada, reintentando subidas pendientes...');
+retryAllPendingSync(true);
+});
+
+document.addEventListener('visibilitychange',()=>{
+if(document.visibilityState==='visible'){
+retryAllPendingSync(true);
+}
+});
+
+/* ---------- Panel de historial (interruptor 📜 Historial) ---------- */
+
+function onHistoryToggleChange(){
+const checked=document.getElementById('historyToggle').checked;
+if(checked){
+openHistoryPanel();
+}else{
+closeHistoryPanel();
+}
+}
+
+async function openHistoryPanel(){
+document.getElementById('historyToggle').checked=true;
+document.getElementById('historyPanel').classList.add('active');
+await renderHistoryPanel();
+}
+
+function closeHistoryPanel(){
+document.getElementById('historyToggle').checked=false;
+document.getElementById('historyPanel').classList.remove('active');
+}
+
+function refreshHistoryPanelIfOpen(){
+const panel=document.getElementById('historyPanel');
+if(panel&&panel.classList.contains('active')){
+renderHistoryPanel();
+}
+}
+
+const HISTORY_STATUS_META={
+ok:{icon:'✅',label:'Correcto',cls:'status-ok'},
+pending:{icon:'⏳',label:'Subiendo...',cls:'status-uploading'},
+error:{icon:'❌',label:'Falló, guardado local',cls:'status-error'}
+};
+
+function formatHistoryDate(iso){
+if(!iso)return'';
+try{
+const d=new Date(iso);
+return d.toLocaleString('es',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+}catch(err){
+return iso;
+}
+}
+
+async function renderHistoryPanel(){
+const listEl=document.getElementById('historyList');
+const summaryEl=document.getElementById('historySummary');
+const retryAllBtn=document.getElementById('historyRetryAllBtn');
+listEl.innerHTML='<div class="history-empty">Cargando historial...</div>';
+try{
+const entries=await getAllSyncEntries();
+const pendingCount=entries.filter(e=>e.status==='pending'||e.status==='error').length;
+const okCount=entries.filter(e=>e.status==='ok').length;
+summaryEl.textContent=`${entries.length} registros · ${okCount} correctos · ${pendingCount} pendientes`;
+retryAllBtn.style.display=pendingCount>0?'block':'none';
+if(entries.length===0){
+listEl.innerHTML='<div class="history-empty">Aún no hay subidas registradas.</div>';
+return;
+}
+listEl.innerHTML='';
+entries.forEach(entry=>{
+const meta=HISTORY_STATUS_META[entry.status]||HISTORY_STATUS_META.error;
+const item=document.createElement('div');
+item.className=`history-item ${meta.cls}`;
+const dateStr=formatHistoryDate(entry.syncedAt||entry.lastAttemptAt||entry.createdAt);
+let metaLine=`${entry.comicsCount} comics · ${dateStr}`;
+if(entry.status==='error'&&entry.lastError){
+metaLine+=` · ${entry.lastError.slice(0,60)}`;
+}
+if(entry.attempts>1){
+metaLine+=` · ${entry.attempts} intentos`;
+}
+item.innerHTML=`
+<div class="history-item-icon">${meta.icon}</div>
+<div class="history-item-body">
+<div class="history-item-title">${entry.status==='ok'?'Correcto':(entry.status==='pending'?'Subiendo...':'Falló, guardado local')}</div>
+<div class="history-item-meta">${escapeHtml(metaLine)}</div>
+</div>
+`;
+if((entry.status==='error'||entry.status==='pending')&&entry.comicsSnapshot){
+const retryBtn=document.createElement('button');
+retryBtn.className='history-item-retry';
+retryBtn.textContent='🔄 Reintentar';
+retryBtn.onclick=async()=>{
+retryBtn.disabled=true;
+retryBtn.textContent='Subiendo...';
+await attemptGithubSync(entry.localId,entry.comicsSnapshot);
+await renderHistoryPanel();
+};
+item.appendChild(retryBtn);
+}
+listEl.appendChild(item);
+});
+}catch(err){
+listEl.innerHTML=`<div class="history-empty">No se pudo cargar el historial: ${escapeHtml(err.message||String(err))}</div>`;
+}
+}
+
+async function clearSyncHistory(){
+if(!confirm('¿Borrar el historial de subidas? (Esto no afecta tus comics, solo el registro de sincronizaciones)'))return;
+try{
+const entries=await getAllSyncEntries();
+const stillPending=entries.filter(e=>e.status==='pending'||e.status==='error');
+for(const e of entries){
+if(e.status==='ok'){
+await deleteSyncEntry(e.localId);
+}
+}
+await renderHistoryPanel();
+if(stillPending.length>0){
+alert(`ℹ️ Se limpiaron las subidas correctas. Se mantuvieron ${stillPending.length} pendientes hasta que se suban.`);
+}
+}catch(err){
+alert('❌ No se pudo limpiar el historial: '+(err.message||err));
+}
+}
+
+/* Al cargar la página: si quedaron subidas pendientes de una sesión
+   anterior (por ejemplo se cerró la pestaña sin internet), se
+   reintentan automáticamente y se refleja en el indicador. */
+(async function initSyncSystemOnLoad(){
+try{
+await openSyncHistoryDB();
+const pending=await countPendingSyncEntries();
+if(pending>0){
+setSyncIndicator('pending',`${pending} subida(s) pendiente(s) de antes`,pending);
+hideSyncIndicatorSoon(4000);
+scheduleSyncRetry();
+retryAllPendingSync(true);
+}
+}catch(err){
+console.error('No se pudo inicializar el sistema de historial de sync:',err);
+}
+})();
 
 function escapeHtml(str){
 return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -2020,4 +2462,4 @@ loadFromGitHub();
 initDB();
 </script>
 </body>
-</html>
+   </html>
