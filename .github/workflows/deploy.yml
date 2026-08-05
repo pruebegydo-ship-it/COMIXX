@@ -1,4 +1,4 @@
-name: Deploy Biblioteca de Comics
+name: Publicar app con token
 
 on:
   push:
@@ -11,37 +11,37 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Inyectar token en el HTML
+      - name: Reemplazar el token en index.html
         run: |
-          sed -i "s#__ALMACEN_KEY__#${{ secrets.ALMACEN_KEY }}#g" index.html
+          mkdir -p publish
+          cp index.html publish/index.html
+          sed -i "s|__ALMACEN_KEY__|${{ secrets.ALMACEN_TOKEN }}|g" publish/index.html
 
-      - name: Preparar carpeta de salida
-        run: |
-          mkdir -p dist
-          cp index.html dist/index.html
-
-      - name: Subir artefacto para Pages
+      - name: Preparar artefacto de Pages
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: publish
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Desplegar a GitHub Pages
+      - name: Publicar en GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
